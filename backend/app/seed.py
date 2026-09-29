@@ -1,7 +1,88 @@
 """示例数据：每个模块给几条不同状态的记录，方便起服务后立刻看到内容。"""
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Any
+
+# 质量监察示例数据围绕「今天」排时间，保证起服务就能看到逾期、待整改、已闭合。
+_today = date.today()
+
+
+def _day(offset: int) -> str:
+    return (_today + timedelta(days=offset)).strftime("%Y-%m-%d")
+
+
+_DATE_PLACEHOLDERS = {
+    "d0": _day(0),       # 今天
+    "dm1": _day(-1),     # 昨天
+    "dm2": _day(-2),
+    "dm3": _day(-3),
+    "dm4": _day(-4),
+    "dm5": _day(-5),
+    "dm6": _day(-6),
+    "dm7": _day(-7),
+    "dm8": _day(-8),
+    "dm9": _day(-9),
+    "dm10": _day(-10),
+    "dp3": _day(3),      # 未来的整改期限
+    "dp5": _day(5),
+}
+
+
+def _qc(
+    entry_id: int,
+    status: str,
+    pending: bool,
+    abnormal: bool,
+    *,
+    code: str,
+    day: str,
+    area: str,
+    matter: str,
+    violation: str,
+    clause: str,
+    requirement: str,
+    deadline: str,
+    fixer: str,
+    fix_note: str,
+    nodes: list[tuple[str, str, str, str]],
+) -> dict[str, Any]:
+    """构造一条带时间轴节点的质量监察示例记录。"""
+    return {
+        'id': entry_id,
+        'status': status,
+        'pending': pending,
+        'abnormal': abnormal,
+        'overdue': False,
+        '监察编号': code,
+        '监察日期': day,
+        '监察区域': area,
+        '监察事项': matter,
+        '发现违章': violation,
+        '违章条款': clause,
+        '整改要求': requirement,
+        '整改期限': deadline,
+        '整改人': fixer,
+        '整改情况': fix_note,
+        'timeline': [
+            {'action': action, 'actor': actor, 'time': moment, 'note': note}
+            for action, actor, note, moment in nodes
+        ],
+    }
+
+
+def _resolve_placeholders(value: Any) -> Any:
+    """把 {dm5} 这类日期占位符替换成实际日期，节点时间里带时分也能替换。"""
+    if isinstance(value, str):
+        for key, day in _DATE_PLACEHOLDERS.items():
+            value = value.replace('{' + key + '}', day)
+        return value
+    if isinstance(value, list):
+        return [_resolve_placeholders(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _resolve_placeholders(item) for key, item in value.items()}
+    return value
+
 
 SEED_ROWS: dict[str, list[dict[str, Any]]] = {
     "flightstand": [{'id': 1,
@@ -685,40 +766,80 @@ SEED_ROWS: dict[str, list[dict[str, Any]]] = {
   '处置流程': '应急处置样例3',
   '演练日期': '2026-09-03',
   '预案状态': '应急处置样例3'}],
-    "qualitycheck": [{'id': 1,
-  'status': '待监察',
-  'pending': True,
-  'abnormal': False,
-  '监察编号': 'QUAL-0001',
-  '监察日期': '2026-09-01',
-  '监察区域': '质量监察样例1',
-  '监察事项': '质量监察样例1',
-  '发现违章': '质量监察样例1',
-  '整改要求': '质量监察样例1',
-  '整改期限': '2026-09-01',
-  '监察状态': '质量监察样例1'},
- {'id': 2,
-  'status': '监察中',
-  'pending': True,
-  'abnormal': True,
-  '监察编号': 'QUAL-0002',
-  '监察日期': '2026-09-02',
-  '监察区域': '质量监察样例2',
-  '监察事项': '质量监察样例2',
-  '发现违章': '质量监察样例2',
-  '整改要求': '质量监察样例2',
-  '整改期限': '2026-09-02',
-  '监察状态': '质量监察样例2'},
- {'id': 3,
-  'status': '待整改',
-  'pending': False,
-  'abnormal': False,
-  '监察编号': 'QUAL-0003',
-  '监察日期': '2026-09-03',
-  '监察区域': '质量监察样例3',
-  '监察事项': '质量监察样例3',
-  '发现违章': '质量监察样例3',
-  '整改要求': '质量监察样例3',
-  '整改期限': '2026-09-03',
-  '监察状态': '质量监察样例3'}]
+    "qualitycheck": [_qc(
+        1, '待监察', True, False,
+        code='QUAL-{d0}-001', day='{d0}', area='T1 客机坪',
+        matter='早高峰机坪车辆秩序抽查', violation='', clause='',
+        requirement='', deadline='', fixer='', fix_note='',
+        nodes=[('登记监察记录', '值班监察员', '在T1 客机坪登记监察事项：早高峰机坪车辆秩序抽查', '{d0} 08:10')],
+    ), _qc(
+        2, '监察中', True, False,
+        code='QUAL-{dm2}-001', day='{dm2}', area='203 号机位',
+        matter='航油加注作业现场监察', violation='加油作业现场监护人员短时脱岗', clause='JC-03',
+        requirement='', deadline='', fixer='', fix_note='',
+        nodes=[('登记监察记录', '值班监察员', '在203 号机位登记监察事项：航油加注作业现场监察', '{dm2} 09:00'),
+               ('开展监察', '值班监察员', '监察人员到岗，监察进行中', '{dm2} 09:20')],
+    ), _qc(
+        3, '待整改', True, True,
+        code='QUAL-{dm5}-001', day='{dm5}', area='118 号机位',
+        matter='行李装卸作业安全检查', violation='装卸过程中舱门下方未系挂安全网', clause='JC-04',
+        requirement='立即补挂安全网，对装卸班组开展一次现场复训并提交复训记录', deadline='{dm3}',
+        fixer='', fix_note='',
+        nodes=[('登记监察记录', '值班监察员', '在118 号机位登记监察事项：行李装卸作业安全检查', '{dm5} 08:30'),
+               ('开展监察', '值班监察员', '监察人员到岗，监察进行中', '{dm5} 08:45'),
+               ('下达整改', '值班监察员', '整改要求：立即补挂安全网，对装卸班组开展一次现场复训并提交复训记录；整改期限：{dm3}', '{dm5} 10:00')],
+    ), _qc(
+        4, '待整改', True, True,
+        code='QUAL-{dm4}-001', day='{dm4}', area='T2 货运机坪',
+        matter='车辆行驶路线专项监察', violation='牵引车未按服务路线行驶，侵入相邻机位作业区', clause='JC-02',
+        requirement='重新核准路线通行证并对责任单位进行全员交底', deadline='{dm2}',
+        fixer='', fix_note='',
+        nodes=[('登记监察记录', '值班监察员', '在T2 货运机坪登记监察事项：车辆行驶路线专项监察', '{dm4} 14:00'),
+               ('开展监察', '值班监察员', '监察人员到岗，监察进行中', '{dm4} 14:15'),
+               ('下达整改', '值班监察员', '整改要求：重新核准路线通行证并对责任单位进行全员交底；整改期限：{dm2}', '{dm4} 15:30')],
+    ), _qc(
+        5, '待整改', True, False,
+        code='QUAL-{dm1}-001', day='{dm1}', area='305 号机位',
+        matter='除冰作业记录抽查', violation='除冰液开始喷洒时间未在作业单记录', clause='JC-08',
+        requirement='补全本月除冰作业单并核对液位记录', deadline='{dp5}',
+        fixer='', fix_note='',
+        nodes=[('登记监察记录', '值班监察员', '在305 号机位登记监察事项：除冰作业记录抽查', '{dm1} 06:40'),
+               ('开展监察', '值班监察员', '监察人员到岗，监察进行中', '{dm1} 06:55'),
+               ('下达整改', '值班监察员', '整改要求：补全本月除冰作业单并核对液位记录；整改期限：{dp5}', '{dm1} 08:00')],
+    ), _qc(
+        6, '待整改', True, False,
+        code='QUAL-{dm2}-002', day='{dm2}', area='T1 客机坪',
+        matter='夜班 FOD 防控复查', violation='作业结束后责任区遗留包装捆扎物', clause='JC-06',
+        requirement='立即清扫并复查，责任单位提交书面整改报告', deadline='{dp3}',
+        fixer='行李装卸班组', fix_note='已组织班组对责任区全面清扫，复查无遗留物，书面报告已提交',
+        nodes=[('登记监察记录', '值班监察员', '在T1 客机坪登记监察事项：夜班 FOD 防控复查', '{dm2} 22:05'),
+               ('开展监察', '值班监察员', '监察人员到岗，监察进行中', '{dm2} 22:20'),
+               ('下达整改', '值班监察员', '整改要求：立即清扫并复查，责任单位提交书面整改报告；整改期限：{dp3}', '{dm2} 23:00'),
+               ('提交整改', '行李装卸班组', '整改情况：已组织班组对责任区全面清扫，复查无遗留物，书面报告已提交', '{dm1} 09:30')],
+    ), _qc(
+        7, '已闭合', False, False,
+        code='QUAL-{dm8}-001', day='{dm8}', area='211 号机位',
+        matter='廊桥对接流程监察', violation='撤离廊桥时未在确认单上签字', clause='JC-05',
+        requirement='操作员重新跟班考核，廊桥对接确认单逐项核对', deadline='{dm6}',
+        fixer='廊桥运行部', fix_note='操作员已完成跟班考核，确认单流程已纳入班前讲评',
+        nodes=[('登记监察记录', '值班监察员', '在211 号机位登记监察事项：廊桥对接流程监察', '{dm8} 10:00'),
+               ('开展监察', '值班监察员', '监察人员到岗，监察进行中', '{dm8} 10:15'),
+               ('下达整改', '值班监察员', '整改要求：操作员重新跟班考核，廊桥对接确认单逐项核对；整改期限：{dm6}', '{dm8} 11:00'),
+               ('提交整改', '廊桥运行部', '整改情况：操作员已完成跟班考核，确认单流程已纳入班前讲评', '{dm7} 16:00'),
+               ('确认闭合', '值班监察员', '整改结果复核通过，监控录像与确认单一致', '{dm6} 10:30')],
+    ), _qc(
+        8, '已闭合', False, False,
+        code='QUAL-{dm10}-001', day='{dm10}', area='T2 货运机坪',
+        matter='机坪个人防护用品穿戴检查', violation='两名装卸人员进入机坪未穿着反光背心', clause='JC-07',
+        requirement='清退出场补全防护用品，准入培训补课后重新进入作业区', deadline='{dm8}',
+        fixer='货运保障部', fix_note='两名人员已完成准入补课并考核合格，反光背心已配发到位',
+        nodes=[('登记监察记录', '值班监察员', '在T2 货运机坪登记监察事项：机坪个人防护用品穿戴检查', '{dm10} 09:00'),
+               ('开展监察', '值班监察员', '监察人员到岗，监察进行中', '{dm10} 09:20'),
+               ('下达整改', '值班监察员', '整改要求：清退出场补全防护用品，准入培训补课后重新进入作业区；整改期限：{dm8}', '{dm10} 09:40'),
+               ('提交整改', '货运保障部', '整改情况：两名人员已完成准入补课并考核合格，反光背心已配发到位', '{dm9} 11:00'),
+               ('确认闭合', '值班监察员', '现场复查防护用品穿戴规范，予以闭合', '{dm8} 14:00')],
+    )]
 }
+
+# 质量监察示例里的 {d0}/{dm5} 等占位符统一在这里换成真实日期，其余模块原样保留。
+SEED_ROWS["qualitycheck"] = _resolve_placeholders(SEED_ROWS["qualitycheck"])

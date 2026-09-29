@@ -28,22 +28,38 @@ class Store:
         return None
 
     def overview(self) -> dict[str, object]:
+        # 质量监察模块单独回传逾期条数，供概览待办区报警。
+        # 延迟导入：service 层反过来 import store，模块加载期引用会形成环。
+        from app.services.qualitycheck import MODULE as QC_MODULE, QualitycheckService
+
+        qualitycheck_overdue = QualitycheckService().sweep_and_count_overdue()
         modules: list[dict[str, object]] = []
         for name in self.module_names():
             rows = self.rows(name)
-            modules.append({
+            item: dict[str, object] = {
                 "name": name,
                 "created": len(rows),
                 "pending": sum(1 for row in rows if row.get("pending")),
                 "abnormal": sum(1 for row in rows if row.get("abnormal")),
-            })
+            }
+            if name == QC_MODULE:
+                item["overdue"] = qualitycheck_overdue
+            modules.append(item)
         cards = [
             {"label": "业务模块", "value": len(modules)},
             {"label": "今日新增", "value": sum(int(item["created"]) for item in modules)},
             {"label": "待处理", "value": sum(int(item["pending"]) for item in modules)},
             {"label": "异常量", "value": sum(int(item["abnormal"]) for item in modules)},
         ]
-        return {"cards": cards, "modules": modules}
+        todos = [
+            {
+                "label": "监察整改逾期",
+                "value": qualitycheck_overdue,
+                "tone": "danger" if qualitycheck_overdue else "normal",
+                "link": "/qualitycheck",
+            }
+        ] if qualitycheck_overdue else []
+        return {"cards": cards, "todos": todos, "modules": modules}
 
 
 store = Store()
