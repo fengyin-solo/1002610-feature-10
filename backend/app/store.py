@@ -28,9 +28,19 @@ class Store:
         return None
 
     def overview(self) -> dict[str, object]:
+        # 逾期回写：先跑质量监察逾期扫描，再把逾期条数作为待办放进概览，
+        # 延迟导入避免和 service 层形成循环引用。
+        from app.services.qualitycheck import MODULE as QC_MODULE
+        from app.services.qualitycheck import QualitycheckService
+
+        overdue_total = QualitycheckService().overdue_count()
+
         modules: list[dict[str, object]] = []
         for name in self.module_names():
             rows = self.rows(name)
+            if name == QC_MODULE:
+                # 先触发扫描，保证 pending/abnormal 与时间轴口径一致
+                QualitycheckService().sweep_overdue()
             modules.append({
                 "name": name,
                 "created": len(rows),
@@ -42,8 +52,17 @@ class Store:
             {"label": "今日新增", "value": sum(int(item["created"]) for item in modules)},
             {"label": "待处理", "value": sum(int(item["pending"]) for item in modules)},
             {"label": "异常量", "value": sum(int(item["abnormal"]) for item in modules)},
+            {"label": "逾期整改待办", "value": overdue_total},
         ]
-        return {"cards": cards, "modules": modules}
+        todos = [
+            {
+                "name": "质量监察逾期未整改",
+                "module": QC_MODULE,
+                "count": overdue_total,
+                "detail": "已过整改期限的监察记录已自动标红并退回待整改，请尽快处理",
+            }
+        ]
+        return {"cards": cards, "modules": modules, "todos": todos}
 
 
 store = Store()

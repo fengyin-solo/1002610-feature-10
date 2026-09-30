@@ -1,7 +1,151 @@
 """示例数据：每个模块给几条不同状态的记录，方便起服务后立刻看到内容。"""
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Any
+
+
+def _qualitycheck_seed() -> list[dict[str, Any]]:
+    """质量监察种子数据：围绕当前日期铺开时间轴。
+
+    含两条已过整改期限的记录（一条卡在监察中、一条已待整改），服务启动后会被
+    逾期扫描自动标红并退回待整改；另覆盖正常流转的待监察/监察中/已闭合各一条，
+    并故意安排一组同区域同日重复单，方便演示时间轴按时间去重。
+    """
+    today = date.today()
+
+    def day(offset: int) -> str:
+        return (today + timedelta(days=offset)).isoformat()
+
+    def stamp(offset: int, hour: str) -> str:
+        return f"{day(offset)} {hour}"
+
+    base: list[dict[str, Any]] = [
+        {
+            "id": 1,
+            "status": "待监察",
+            "pending": True,
+            "abnormal": False,
+            "监察编号": "QUAL-0001",
+            "监察日期": day(0),
+            "监察区域": "T1 停机坪",
+            "监察事项": "作业车辆限速执行情况",
+            "发现违章": "",
+            "违章条款": None,
+            "整改要求": "",
+            "整改期限": None,
+            "整改人": None,
+            "整改时间": None,
+            "timeline": [
+                {"stage": "待监察", "action": "登记监察", "operator": "值班管理员", "time": stamp(0, "08:20"), "note": "早班会布置的专项监察"},
+            ],
+        },
+        {
+            "id": 2,
+            "status": "监察中",
+            "pending": True,
+            "abnormal": False,
+            "监察编号": "QUAL-0002",
+            "监察日期": day(-3),
+            "监察区域": "T2 货运区",
+            "监察事项": "叉车作业规范",
+            "发现违章": "叉车货叉载人穿行货区",
+            "违章条款": "CCAR-140-2022-17-02",
+            "整改要求": "",
+            "整改期限": day(-1),
+            "整改人": None,
+            "整改时间": None,
+            "timeline": [
+                {"stage": "待监察", "action": "登记监察", "operator": "值班管理员", "time": stamp(-3, "09:05"), "note": ""},
+                {"stage": "监察中", "action": "开展监察", "operator": "王监察", "time": stamp(-2, "10:30"), "note": "现场核查中"},
+            ],
+        },
+        {
+            "id": 3,
+            "status": "待整改",
+            "pending": True,
+            "abnormal": True,
+            "监察编号": "QUAL-0003",
+            "监察日期": day(-4),
+            "监察区域": "T1 加油区",
+            "监察事项": "航油加注静电接地",
+            "发现违章": "加油前未接静电接地夹即开始加油",
+            "违章条款": "CCAR-140-2022-12-03",
+            "整改要求": "立即停止作业，补接静电接地夹并复训当班加油员",
+            "整改期限": day(-1),
+            "整改人": None,
+            "整改时间": None,
+            "timeline": [
+                {"stage": "待监察", "action": "登记监察", "operator": "值班管理员", "time": stamp(-4, "14:10"), "note": ""},
+                {"stage": "监察中", "action": "开展监察", "operator": "王监察", "time": stamp(-4, "14:40"), "note": ""},
+                {"stage": "待整改", "action": "下达整改", "operator": "王监察", "time": stamp(-3, "09:00"), "note": "要求停止作业并复训"},
+            ],
+        },
+        {
+            "id": 4,
+            "status": "待整改",
+            "pending": True,
+            "abnormal": True,
+            "监察编号": "QUAL-0004",
+            "监察日期": day(-2),
+            "监察区域": "T3 廊桥区",
+            "监察事项": "廊桥对接前净空确认",
+            "发现违章": "对接廊桥前未确认航空器周边净空",
+            "违章条款": "MH/T-3010-2024-05-01",
+            "整改要求": "重新培训廊桥操作员净空确认流程，考核合格后上岗",
+            "整改期限": day(2),
+            "整改人": None,
+            "整改时间": None,
+            "timeline": [
+                {"stage": "待监察", "action": "登记监察", "operator": "值班管理员", "time": stamp(-2, "11:00"), "note": ""},
+                {"stage": "监察中", "action": "开展监察", "operator": "李监察", "time": stamp(-2, "13:20"), "note": ""},
+                {"stage": "待整改", "action": "下达整改", "operator": "李监察", "time": stamp(-1, "09:30"), "note": ""},
+            ],
+        },
+        {
+            "id": 5,
+            "status": "已闭合",
+            "pending": False,
+            "abnormal": False,
+            "监察编号": "QUAL-0005",
+            "监察日期": day(-8),
+            "监察区域": "T2 货运区",
+            "监察事项": "货物码放限高",
+            "发现违章": "拖斗货物码放超过限高标识",
+            "违章条款": "CCAR-140-2022-22-04",
+            "整改要求": "重新码放并加装限高杆",
+            "整改期限": day(-5),
+            "整改人": "赵班组",
+            "整改时间": stamp(-6, "16:00"),
+            "timeline": [
+                {"stage": "待监察", "action": "登记监察", "operator": "值班管理员", "time": stamp(-8, "09:00"), "note": ""},
+                {"stage": "监察中", "action": "开展监察", "operator": "王监察", "time": stamp(-8, "10:00"), "note": ""},
+                {"stage": "待整改", "action": "下达整改", "operator": "王监察", "time": stamp(-7, "09:00"), "note": ""},
+                {"stage": "已闭合", "action": "确认闭合", "operator": "王监察", "time": stamp(-6, "16:30"), "note": "限高杆加装完成，复查合格"},
+            ],
+        },
+        {
+            "id": 6,
+            "status": "待监察",
+            "pending": True,
+            "abnormal": False,
+            "监察编号": "QUAL-0006",
+            "监察日期": day(-2),
+            "监察区域": "T3 廊桥区",
+            "监察事项": "廊桥对接前净空确认",
+            "发现违章": "",
+            "违章条款": None,
+            "整改要求": "",
+            "整改期限": None,
+            "整改人": None,
+            "整改时间": None,
+            "timeline": [
+                {"stage": "待监察", "action": "登记监察", "operator": "值班管理员", "time": stamp(-2, "15:40"), "note": "与 QUAL-0004 同区域同日，演示去重提示"},
+            ],
+        },
+    ]
+    return base
+
 
 SEED_ROWS: dict[str, list[dict[str, Any]]] = {
     "flightstand": [{'id': 1,
@@ -685,40 +829,5 @@ SEED_ROWS: dict[str, list[dict[str, Any]]] = {
   '处置流程': '应急处置样例3',
   '演练日期': '2026-09-03',
   '预案状态': '应急处置样例3'}],
-    "qualitycheck": [{'id': 1,
-  'status': '待监察',
-  'pending': True,
-  'abnormal': False,
-  '监察编号': 'QUAL-0001',
-  '监察日期': '2026-09-01',
-  '监察区域': '质量监察样例1',
-  '监察事项': '质量监察样例1',
-  '发现违章': '质量监察样例1',
-  '整改要求': '质量监察样例1',
-  '整改期限': '2026-09-01',
-  '监察状态': '质量监察样例1'},
- {'id': 2,
-  'status': '监察中',
-  'pending': True,
-  'abnormal': True,
-  '监察编号': 'QUAL-0002',
-  '监察日期': '2026-09-02',
-  '监察区域': '质量监察样例2',
-  '监察事项': '质量监察样例2',
-  '发现违章': '质量监察样例2',
-  '整改要求': '质量监察样例2',
-  '整改期限': '2026-09-02',
-  '监察状态': '质量监察样例2'},
- {'id': 3,
-  'status': '待整改',
-  'pending': False,
-  'abnormal': False,
-  '监察编号': 'QUAL-0003',
-  '监察日期': '2026-09-03',
-  '监察区域': '质量监察样例3',
-  '监察事项': '质量监察样例3',
-  '发现违章': '质量监察样例3',
-  '整改要求': '质量监察样例3',
-  '整改期限': '2026-09-03',
-  '监察状态': '质量监察样例3'}]
+    "qualitycheck": _qualitycheck_seed()
 }
